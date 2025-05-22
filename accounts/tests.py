@@ -67,32 +67,65 @@ class TestUserRegistration:
 
 @pytest.mark.django_db
 class TestUserAuthentication:
-    def test_token_obtain(self, api_client, user):
-        url = reverse('token_obtain_pair')
+    def test_login_successful(self, api_client, user):
+        url = reverse('login')
         data = {
             'email': user.email,
-            'password': 'testpass123'
+            'password': 'testpass123'  # This should match the password in UserFactory
         }
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_200_OK
         assert 'access' in response.data
         assert 'refresh' in response.data
+        assert 'user' in response.data
+        assert response.data['user']['email'] == user.email
 
-    def test_token_refresh(self, api_client, user):
-        # First obtain tokens
-        token_url = reverse('token_obtain_pair')
+    def test_login_invalid_credentials(self, api_client):
+        url = reverse('login')
+        data = {
+            'email': 'nonexistent@example.com',
+            'password': 'wrongpassword'
+        }
+        response = api_client.post(url, data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_inactive_user(self, api_client, user):
+        user.is_active = False
+        user.save()
+        url = reverse('login')
         data = {
             'email': user.email,
             'password': 'testpass123'
         }
-        response = api_client.post(token_url, data)
-        refresh_token = response.data['refresh']
+        response = api_client.post(url, data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'detail' in response.data
 
-        # Then try to refresh
-        refresh_url = reverse('token_refresh')
-        response = api_client.post(refresh_url, {'refresh': refresh_token})
+    def test_logout_successful(self, authenticated_client):
+        # First login to get refresh token
+        login_url = reverse('login')
+        data = {
+            'email': authenticated_client.handler._force_user.email,
+            'password': 'testpass123'
+        }
+        login_response = authenticated_client.post(login_url, data)
+        refresh_token = login_response.data['refresh']
+
+        # Then logout
+        logout_url = reverse('logout')
+        response = authenticated_client.post(logout_url, {'refresh': refresh_token})
         assert response.status_code == status.HTTP_200_OK
-        assert 'access' in response.data
+        assert response.data['detail'] == 'Successfully logged out.'
+
+    def test_logout_without_token(self, authenticated_client):
+        url = reverse('logout')
+        response = authenticated_client.post(url, {})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_logout_with_invalid_token(self, authenticated_client):
+        url = reverse('logout')
+        response = authenticated_client.post(url, {'refresh': 'invalid-token'})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 @pytest.mark.django_db
 class TestUserProfile:
