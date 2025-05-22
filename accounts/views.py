@@ -1,9 +1,14 @@
 from django.shortcuts import render
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from rest_framework import status
 from django.contrib.auth import get_user_model
-from .serializers import UserRegistrationSerializer, UserSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from .serializers import (
+    UserRegistrationSerializer, 
+    UserSerializer,
+    LoginSerializer,
+    TokenResponseSerializer
+)
 
 User = get_user_model()
 
@@ -25,3 +30,36 @@ class UserListView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = (permissions.IsAdminUser,)
+
+
+class LoginView(generics.GenericAPIView):
+    permission_classes = (permissions.AllowAny,)
+    serializer_class = LoginSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # The validated_data contains user and tokens due to our LoginSerializer implementation
+        validated_data = serializer.validated_data
+        
+        response_serializer = TokenResponseSerializer({
+            'access': validated_data['access'],
+            'refresh': validated_data['refresh'],
+            'user': validated_data['user']
+        })
+
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+class LogoutView(generics.GenericAPIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, *args, **kwargs):
+        try:
+            # Get the refresh token from request data
+            refresh_token = request.data.get('refresh')
+            RefreshToken(refresh_token).blacklist()
+            return Response({'detail': 'Successfully logged out.'}, status=status.HTTP_200_OK)
+        except Exception:
+            return Response({'detail': 'Invalid token.'}, status=status.HTTP_400_BAD_REQUEST)
