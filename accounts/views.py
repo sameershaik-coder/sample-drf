@@ -69,7 +69,8 @@ class LogoutView(generics.GenericAPIView):
                 {'detail': 'Successfully logged out.'}, 
                 status=status.HTTP_200_OK
             )
-        except Exception:
+        except Exception as e:
+            print(e)
             return Response(
                 {'detail': 'Invalid token.'}, 
                 status=status.HTTP_400_BAD_REQUEST
