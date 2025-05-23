@@ -9,7 +9,7 @@ from .serializers import (
     LoginSerializer,
     TokenResponseSerializer
 )
-
+from rest_framework.views import APIView
 User = get_user_model()
 
 class RegisterView(generics.CreateAPIView):
@@ -18,12 +18,18 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
 
 
-class UserDetailView(generics.RetrieveUpdateAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    
-    def get_object(self):
-        return self.request.user
+class UserDetailView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class UserListView(generics.ListAPIView):
